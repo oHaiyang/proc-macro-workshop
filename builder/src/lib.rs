@@ -32,14 +32,35 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
     });
 
+    let error_if_none = proc_named_values(&input.data, |f: &syn::Field| {
+        let name = &f.ident;
+        let name_str = name.as_ref().map(|i| i.to_string()).unwrap_or_default();
+        quote! {
+            if self.#name.is_none() { return Err(format!("Field {} is None!", #name_str).into()); }
+        }
+    });
+
+    let unwrap_fields = proc_named_values(&input.data, |f: &syn::Field| {
+        let name = &f.ident;
+        quote! {
+            #name: self.#name.take().unwrap()
+        }
+    });
+
     let expanded = quote! {
         pub struct #builder_name {
             #( #fields ),*
         }
         impl #builder_name {
             #( #methods )*
+
+            pub fn build(&mut self) -> Result<#name, Box<dyn std::error::Error>> {
+                #( #error_if_none)*
+                Ok(#name {
+                    #( #unwrap_fields ),*
+                })
+            }
         }
-        // The generated impl.
         impl #impl_generics #name #ty_generics #where_clause {
             fn builder() -> #builder_name {
                 #builder_name {
