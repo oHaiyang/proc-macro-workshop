@@ -55,5 +55,8 @@ pub struct Command {
 fn main() {
     let builder = Command::builder();
 
-    let _ = builder;
+    println!("builder.executable: {:?}", builder.executable);
+    println!("builder.args: {:?}", builder.args);
+    println!("builder.env: {:?}", builder.env);
+    println!("builder.current_dir: {:?}", builder.current_dir);
 }
