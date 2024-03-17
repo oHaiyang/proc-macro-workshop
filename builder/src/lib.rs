@@ -1,4 +1,5 @@
 use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_macro_input, punctuated::Iter, Data, DeriveInput, Fields, Ident};
 
@@ -9,40 +10,27 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let builder_name = Ident::new(&(name.to_string() + "Builder"), name.span());
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    let fields = match input.data {
-        Data::Struct(ref data) => match data.fields {
-            Fields::Named(ref fields) => fields.named.iter().map(|f| {
-                let name = &f.ident;
-                let ty = &f.ty;
-                quote!(#name: ::core::option::Option<#ty>)
-            }),
-            Fields::Unnamed(_) | Fields::Unit => unimplemented!(),
-        },
-        Data::Enum(_) | Data::Union(_) => unimplemented!(),
-    };
+    let fields = proc_named_values(&input.data, |f: &syn::Field| {
+        let name = &f.ident;
+        let ty = &f.ty;
+        quote!(#name: ::core::option::Option<#ty>)
+    });
 
-    let none_fields = proc_named_values(input, |f: syn::Field| {
+    let none_fields = proc_named_values(&input.data, |f: &syn::Field| {
         let name = &f.ident;
         quote!(#name: ::core::option::Option::None)
     });
 
-    // TODO: should not repeat this
-    let methods = match input.data {
-        Data::Struct(ref data) => match data.fields {
-            Fields::Named(ref fields) => fields.named.iter().map(|f| {
-                let name = &f.ident;
-                let ty = &f.ty;
-                quote! {
-                    pub fn #name(&mut self, value: #ty) -> &mut Self {
-                        self.#name = ::core::option::Option::Some(value);
-                        self
-                    }
-                }
-            }),
-            Fields::Unnamed(_) | Fields::Unit => unimplemented!(),
-        },
-        Data::Enum(_) | Data::Union(_) => unimplemented!(),
-    };
+    let methods = proc_named_values(&input.data, |f: &syn::Field| {
+        let name = &f.ident;
+        let ty = &f.ty;
+        quote! {
+            pub fn #name(&mut self, value: #ty) -> &mut Self {
+                self.#name = ::core::option::Option::Some(value);
+                self
+            }
+        }
+    });
 
     let expanded = quote! {
         pub struct #builder_name {
@@ -65,18 +53,15 @@ pub fn derive(input: TokenStream) -> TokenStream {
 }
 
 fn proc_named_values<F>(
-    input: DeriveInput,
+    data: &Data,
     f: F,
-) -> core::iter::Map<Iter<'_, syn::Field>, impl Fn(&syn::Field) -> TokenStream>
+) -> core::iter::Map<Iter<'_, syn::Field>, impl Fn(&syn::Field) -> TokenStream2>
 where
-    F: Fn(&syn::Field) -> TokenStream,
+    F: Fn(&syn::Field) -> TokenStream2,
 {
-    match input.data {
-        Data::Struct(ref data) => match data.fields {
-            Fields::Named(ref fields) => {
-                let aha = fields.named.iter();
-                fields.named.iter().map(f)
-            }
+    match data {
+        Data::Struct(data) => match data.fields {
+            Fields::Named(ref fields) => fields.named.iter().map(f),
             Fields::Unnamed(_) | Fields::Unit => unimplemented!(),
         },
         Data::Enum(_) | Data::Union(_) => unimplemented!(),
